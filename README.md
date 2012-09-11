@@ -17,3 +17,12 @@ Permission is hereby granted, free of charge, to any person obtaining a copy of 
 The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+INTRODUCTION
+============
+
+SWFUpload is a JavaScript Library that wraps the Flash Player's upload function. It brings your uploads to the next level with Multiple File Selection, Upload Progress and Client-side File Size Checking.
+
+Unlike other Flash upload tools, SWFUpload leaves the UI in the developer's hands. Using a set of event handlers developers can display upload progress and status to the user in their own HTML/CSS UI.
+
+SWFUpload has been featured in such projects as YouTube and WordPress.
