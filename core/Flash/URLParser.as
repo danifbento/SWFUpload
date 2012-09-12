@@ -1,11 +1,7 @@
 /******************************************************************************
-*
-*  Copyright 2012 sapo.pt  All Rights Reserved
-*
-*******************************************************************************
 * @file: URLParser.as
 * @date: 11-09-2012
-* @lastmodified: Tue 11 Sep 2012 10:50:33 AM WEST
+* @lastmodified: Wed 12 Sep 2012 02:39:40 PM WEST
 *
 * @author: dfbento <danielbento@overdestiny.com>
 *
