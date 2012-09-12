@@ -146,6 +146,7 @@ SWFUpload.prototype.initSettings = function (userSettings) {
 	this.ensureDefault("preserve_relative_urls", false);
 	this.ensureDefault("file_post_name", "Filedata");
 	this.ensureDefault("post_params", {});
+	this.ensureDefault("headers",{});
 	this.ensureDefault("use_query_string", false);
 	this.ensureDefault("requeue_on_error", false);
 	this.ensureDefault("http_success", []);
@@ -201,9 +202,14 @@ SWFUpload.prototype.initSettings = function (userSettings) {
 
 	this.ensureDefault("custom_settings", {});
 
+	
+	this.ensureDefault("use_multipart",false);
+	this.ensureDefault("use_chunk",false);
+	this.ensureDefault("chunk_size","200 MB");
+
 	// Other settings
 	this.customSettings = this.settings.custom_settings;
-	
+
 	// Update the flash url if needed
 	if (!!this.settings.prevent_swf_caching) {
 		this.settings.flash_url = this.settings.flash_url + (this.settings.flash_url.indexOf("?") < 0 ? "?" : "&") + "preventswfcaching=" + new Date().getTime();
@@ -265,6 +271,7 @@ SWFUpload.prototype.getFlashHTML = function () {
 SWFUpload.prototype.getFlashVars = function () {
 	// Build a string from the post param object
 	var paramString = this.buildParamString();
+	var headerString = this.buildHeaderString();
 	var httpSuccessString = this.settings.http_success.join(",");
 	
 	// Build the parameter string
@@ -275,6 +282,7 @@ SWFUpload.prototype.getFlashVars = function () {
 			"&amp;httpSuccess=", encodeURIComponent(httpSuccessString),
 			"&amp;assumeSuccessTimeout=", encodeURIComponent(this.settings.assume_success_timeout),
 			"&amp;params=", encodeURIComponent(paramString),
+			"&amp;headers=", encodeURIComponent(headerString),
 			"&amp;filePostName=", encodeURIComponent(this.settings.file_post_name),
 			"&amp;fileTypes=", encodeURIComponent(this.settings.file_types),
 			"&amp;fileTypesDescription=", encodeURIComponent(this.settings.file_types_description),
@@ -282,6 +290,9 @@ SWFUpload.prototype.getFlashVars = function () {
 			"&amp;fileUploadLimit=", encodeURIComponent(this.settings.file_upload_limit),
 			"&amp;fileQueueLimit=", encodeURIComponent(this.settings.file_queue_limit),
 			"&amp;debugEnabled=", encodeURIComponent(this.settings.debug_enabled),
+			"&amp;useMultiPart=", encodeURIComponent(this.settings.use_multipart),
+			"&amp;useChunk=", encodeURIComponent(this.settings.use_chunk),
+			"&amp;chunkSize=", encodeURIComponent(this.settings.chunk_size),
 			"&amp;buttonImageURL=", encodeURIComponent(this.settings.button_image_url),
 			"&amp;buttonWidth=", encodeURIComponent(this.settings.button_width),
 			"&amp;buttonHeight=", encodeURIComponent(this.settings.button_height),
@@ -291,7 +302,7 @@ SWFUpload.prototype.getFlashVars = function () {
 			"&amp;buttonTextStyle=", encodeURIComponent(this.settings.button_text_style),
 			"&amp;buttonAction=", encodeURIComponent(this.settings.button_action),
 			"&amp;buttonDisabled=", encodeURIComponent(this.settings.button_disabled),
-			"&amp;buttonCursor=", encodeURIComponent(this.settings.button_cursor)
+			"&amp;buttonCursor=", encodeURIComponent(this.settings.button_cursor),
 		].join("");
 };
 
@@ -325,6 +336,21 @@ SWFUpload.prototype.buildParamString = function () {
 
 	return paramStringPairs.join("&amp;");
 };
+
+SWFUpload.prototype.buildHeaderString = function () {
+	var headers = this.settings.headers;
+	var headersPair = [];
+
+	if (typeof(headers) === "object") {
+		for (var name in headers) {
+			if (headers.hasOwnProperty(name)) {
+				headersPair.push(encodeURIComponent(name.toString()) + "=" + encodeURIComponent(headers[name].toString()));
+			}
+		}
+	}
+
+	return headersPair.join("&amp;");
+}
 
 // Public: Used to remove a SWFUpload instance from the page. This method strives to remove
 // all references to the SWF, and other objects so memory is properly freed.

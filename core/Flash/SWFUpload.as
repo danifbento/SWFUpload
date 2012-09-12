@@ -9,8 +9,11 @@ package {
 	import flash.net.FileReferenceList;
 	import flash.net.FileReference;
 	import flash.net.FileFilter;
+        import flash.net.URLLoader;
+        import flash.net.URLStream;
 	import flash.net.URLRequest;
 	import flash.net.URLRequestMethod;
+        import flash.net.URLRequestHeader;
 	import flash.net.URLVariables;
 	import flash.events.*;
 	import flash.external.ExternalInterface;
@@ -26,11 +29,16 @@ package {
 	import flash.text.TextFormat;
 	import flash.ui.Mouse;
 	import flash.utils.Timer;
+        import flash.utils.ByteArray;
+        import flash.utils.setTimeout;
+        import flash.system.Security;
 
 	import FileItem;
 	import ExternalCall;
+        import URLParser;
 
-	public class SWFUpload extends Sprite {
+	[SWF(backgroundColor="#FFFFFF",frameRate="15",width="300",height="900")]
+        public class SWFUpload extends Sprite {
 		// Cause SWFUpload to start as soon as the movie starts
 		public static function main():void
 		{
@@ -97,6 +105,15 @@ package {
 		private var assumeSuccessTimeout:Number = 0;
 		private var debugEnabled:Boolean;
 
+
+                // MultiPart and Chunk Data
+                private var useChunk: Boolean = false;
+                private var useMultiPart: Boolean = false;
+                private var chunkSize:uint = 209715200;
+
+                // Custom Headers
+                private var headers: Object;
+		
 		private var buttonLoader:Loader;
 		private var buttonTextField:TextField;
 		private var buttonCursorSprite:Sprite;
@@ -146,8 +163,8 @@ package {
 		
 		private var BUTTON_CURSOR_ARROW:Number						= -1;
 		private var BUTTON_CURSOR_HAND:Number						= -2;
-		
-		public function SWFUpload() {
+
+                public function SWFUpload() {
 			// Do the feature detection.  Make sure this version of Flash supports the features we need. If not
 			// abort initialization.
 			if (!flash.net.FileReferenceList || !flash.net.FileReference || !flash.net.URLRequest || !flash.external.ExternalInterface || !flash.external.ExternalInterface.available || !DataEvent.UPLOAD_COMPLETE_DATA) {
@@ -262,12 +279,18 @@ package {
 			
 			// Get the Flash Vars
 			this.uploadURL = root.loaderInfo.parameters.uploadURL;
+                        var urlparsed: Object = URLParser.parse(this.uploadURL);
+                        if (urlparsed.protocol != "") {
+                            Security.loadPolicyFile(urlparsed.protocol + "://" + urlparsed.host + urlparsed.port + "/crossdomain.xml");
+                        }
 			this.filePostName = root.loaderInfo.parameters.filePostName;
 			this.fileTypes = root.loaderInfo.parameters.fileTypes;
 			this.fileTypesDescription = root.loaderInfo.parameters.fileTypesDescription + " (" + this.fileTypes + ")";
 			this.loadPostParams(root.loaderInfo.parameters.params);
 
-			
+                        // load custom headers
+                        this.loadHeaders(root.loaderInfo.parameters.headers);
+
 			if (!this.filePostName) {
 				this.filePostName = "Filedata";
 			}
@@ -287,7 +310,7 @@ package {
 			}
 
 			try {
-				this.SetFileSizeLimit(String(root.loaderInfo.parameters.fileSizeLimit));
+				this.fileSizeLimit = this.getSize(String(root.loaderInfo.parameters.fileSizeLimit));
 			} catch (ex:Object) {
 				this.fileSizeLimit = 0;
 			}
@@ -306,6 +329,26 @@ package {
 			} catch (ex:Object) {
 				this.fileQueueLimit = 0;
 			}
+
+                        // Using new Multipart method
+                        try {
+                                this.useMultiPart = (String(root.loaderInfo.parameters.useMultiPart) == "true");
+                        } catch (ex:Object) {
+                                this.useMultiPart = false;
+                        }
+
+                        // Chunking is only possible with multipart contents
+                        try {
+                                this.useChunk = ((String(root.loaderInfo.parameters.useChunk) == "true") && this.useMultiPart);
+                        } catch (ex:Object) {
+                                this.useChunk = false;
+                        }
+
+                        try {
+                                this.chunkSize = this.getSize(String(root.loaderInfo.parameters.chunkSize));
+                        } catch(ex:Object) {
+                                this.chunkSize = this.getSize("200 MB");
+                        }
 
 			// Set the queue limit to match the upload limit when the queue limit is bigger than the upload limit
 			if (this.fileQueueLimit > this.fileUploadLimit && this.fileUploadLimit != 0) this.fileQueueLimit = this.fileUploadLimit;
@@ -761,11 +804,16 @@ package {
 		// Cancel the current upload and stops.  Doesn't advance the upload pointer. The current file is requeued at the beginning.
 		private function StopUpload():void {
 			if (this.current_file_item != null) {
+                                
 				// Cancel the upload and re-queue the FileItem
 				this.current_file_item.file_reference.cancel();
-
-				// Remove the event handlers
-				this.removeFileReferenceEventListeners(this.current_file_item);
+                                
+                                if (!this.useMultiPart) {
+				    // Remove the event handlers
+				    this.removeFileReferenceEventListeners(this.current_file_item);
+                                } else {
+                                    this.removeURLStreamEventListeners(this.current_file_item);
+                                }
 
 				this.current_file_item.file_status = FileItem.FILE_STATUS_QUEUED;
 				this.file_queue.unshift(this.current_file_item);
@@ -804,6 +852,9 @@ package {
 						this.Debug("Event: cancelUpload: File ID: " + this.current_file_item.id + ". Cancelled current upload. Suppressed uploadError event.");
 					}
 					this.UploadComplete(false);
+
+                                        this.current_file_item.urlstream.close();
+                                
 			} else if (file_id) {
 					// Find the file in the queue
 					var file_index:Number = this.FindIndexInFileQueue(file_id);
@@ -817,7 +868,12 @@ package {
 						
 						// Cancel the file (just for good measure) and make the callback
 						file_item.file_reference.cancel();
-						this.removeFileReferenceEventListeners(file_item);
+                                                if (!this.useMultiPart) {
+                            			    this.removeFileReferenceEventListeners(file_item);
+                                                } else {
+                                                    file_item.urlstream.close();
+                                                    this.removeURLStreamEventListeners(file_item);
+                                                }
 						//file_item.file_reference = null;
 						
 						if (triggerErrorEvent) {
@@ -849,7 +905,13 @@ package {
 
 					// Cancel the file (just for good measure) and make the callback
 					file_item.file_reference.cancel();
-					this.removeFileReferenceEventListeners(file_item);
+
+                                        if (!this.useMultiPart) {
+					    this.removeFileReferenceEventListeners(file_item);
+                                        } else {
+                                            file_item.urlstream.close();
+                                            this.removeURLStreamEventListeners(file_item);
+                                        }
 					//file_item.file_reference = null;
 
 					if (triggerErrorEvent) {
@@ -1168,8 +1230,8 @@ package {
 		}
 
 		private function SetButtonTextPadding(left:Number, top:Number):void {
-				this.buttonTextField.x = this.buttonTextLeftPadding = left;
-				this.buttonTextField.y = this.buttonTextTopPadding = top;
+		        this.buttonTextField.x = this.buttonTextLeftPadding = left;
+    		        this.buttonTextField.y = this.buttonTextTopPadding = top;
 		}
 		
 		private function SetButtonDisabled(disabled:Boolean):void {
@@ -1254,17 +1316,18 @@ package {
 			if (start_upload) {
 				try {
 					// Set the event handlers
-					this.current_file_item.file_reference.addEventListener(Event.OPEN, this.Open_Handler);
-					this.current_file_item.file_reference.addEventListener(ProgressEvent.PROGRESS, this.FileProgress_Handler);
-					this.current_file_item.file_reference.addEventListener(IOErrorEvent.IO_ERROR, this.IOError_Handler);
-					this.current_file_item.file_reference.addEventListener(SecurityErrorEvent.SECURITY_ERROR, this.SecurityError_Handler);
-					this.current_file_item.file_reference.addEventListener(HTTPStatusEvent.HTTP_STATUS, this.HTTPError_Handler);
-					this.current_file_item.file_reference.addEventListener(Event.COMPLETE, this.Complete_Handler);
-					this.current_file_item.file_reference.addEventListener(DataEvent.UPLOAD_COMPLETE_DATA, this.ServerData_Handler);
+                                        if (!this.useMultiPart) {
+					    this.current_file_item.file_reference.addEventListener(Event.OPEN, this.Open_Handler);
+					    this.current_file_item.file_reference.addEventListener(ProgressEvent.PROGRESS, this.FileProgress_Handler);
+    					    this.current_file_item.file_reference.addEventListener(IOErrorEvent.IO_ERROR, this.IOError_Handler);
+					    this.current_file_item.file_reference.addEventListener(SecurityErrorEvent.SECURITY_ERROR, this.SecurityError_Handler);
+					    this.current_file_item.file_reference.addEventListener(HTTPStatusEvent.HTTP_STATUS, this.HTTPError_Handler);
+					    this.current_file_item.file_reference.addEventListener(Event.COMPLETE, this.Complete_Handler);
+					    this.current_file_item.file_reference.addEventListener(DataEvent.UPLOAD_COMPLETE_DATA, this.ServerData_Handler);
+                                        }
 					
 					// Get the request (post values, etc)
 					var request:URLRequest = this.BuildRequest();
-					
 					if (this.uploadURL.length == 0) {
 						this.Debug("Event: uploadError : IO Error : File ID: " + this.current_file_item.id + ". Upload URL string is empty.");
 
@@ -1280,7 +1343,11 @@ package {
 					} else {
 						this.Debug("ReturnUploadStart(): File accepted by startUpload event and readied for upload.  Starting upload to " + request.url + " for File ID: " + this.current_file_item.id);
 						this.current_file_item.file_status = FileItem.FILE_STATUS_IN_PROGRESS;
-						this.current_file_item.file_reference.upload(request, this.filePostName, false);
+                                                if (!this.useMultiPart) {
+						    this.current_file_item.file_reference.upload(request, this.filePostName, false);
+                                                } else {
+                                                    this.multiPartUpload(this.current_file_item);
+                                                }
 					}
 				} catch (ex:Error) {
 					this.Debug("ReturnUploadStart: Exception occurred: " + message);
@@ -1295,8 +1362,12 @@ package {
 					this.UploadComplete(true);
 				}
 			} else {
-				// Remove the event handlers
-				this.removeFileReferenceEventListeners(this.current_file_item);
+                                if (!this.useMultiPart) {
+				    // Remove the event handlers
+				    this.removeFileReferenceEventListeners(this.current_file_item);
+                                } else {
+                                    this.removeURLStreamEventListeners(this.current_file_item);
+                                }
 
 				// Re-queue the FileItem
 				this.current_file_item.file_status = FileItem.FILE_STATUS_QUEUED;
@@ -1317,6 +1388,7 @@ package {
 			var jsFileObj:Object = this.current_file_item.ToJavaScriptObject();
 			
 			this.removeFileReferenceEventListeners(this.current_file_item);
+                        this.removeURLStreamEventListeners(this.current_file_item);
 
 			if (!eligible_for_requeue || this.requeueOnError == false) {
 				//this.current_file_item.file_reference = null;
@@ -1377,7 +1449,7 @@ package {
 			// Create the request object
 			var request:URLRequest = new URLRequest();
 			request.method = URLRequestMethod.POST;
-			
+
 			var file_post:Object = this.current_file_item.GetPostObject();
 			
 			if (this.useQueryString) {
@@ -1418,7 +1490,7 @@ package {
 				request.url = this.uploadURL;
 				request.data = post;
 			}
-			
+
 			return request;
 		}
 		
@@ -1449,6 +1521,9 @@ package {
 			debug_info += "File Size Limit:        " + this.fileSizeLimit + " bytes\n";
 			debug_info += "File Upload Limit:      " + this.fileUploadLimit + "\n";
 			debug_info += "File Queue Limit:       " + this.fileQueueLimit + "\n";
+                        debug_info += "Use Chunk:              " + this.useChunk + "\n";
+                        debug_info += "Use MultiPart:          " + this.useMultiPart + "\n";
+                        debug_info += "Chunk Size:             " + this.chunkSize + "\n";
 			debug_info += "Post Params:\n";
 			for (var key:String in this.uploadPostObject) {
 				if (this.uploadPostObject.hasOwnProperty(key)) {
@@ -1505,22 +1580,30 @@ package {
 			}
 		}
 		
-		private function loadPostParams(param_string:String):void {
-			var post_object:Object = {};
+		private function parseSubSet(subset_string:String):Object {
+			var robject:Object = {};
 
-			if (param_string != null) {
-				var name_value_pairs:Array = param_string.split("&amp;");
+			if (subset_string != null) {
+				var name_value_pairs:Array = subset_string.split("&amp;");
 				
 				for (var i:Number = 0; i < name_value_pairs.length; i++) {
 					var name_value:String = String(name_value_pairs[i]);
 					var index_of_equals:Number = name_value.indexOf("=");
 					if (index_of_equals > 0) {
-						post_object[decodeURIComponent(name_value.substring(0, index_of_equals))] = decodeURIComponent(name_value.substr(index_of_equals + 1));
+						robject[decodeURIComponent(name_value.substring(0, index_of_equals))] = decodeURIComponent(name_value.substr(index_of_equals + 1));
 					}
 				}
 			}
-			this.uploadPostObject = post_object;
+			return robject;
 		}
+
+                private function loadPostParams(param_string: String): void {
+                    this.uploadPostObject = this.parseSubSet(param_string);
+                }
+
+                private function loadHeaders(header_string: String): void {
+                    this.headers = this.parseSubSet(header_string);
+                }
 		
 		private function removeFileReferenceEventListeners(file_item:FileItem):void {
 			if (file_item != null && file_item.file_reference != null) {
@@ -1533,5 +1616,187 @@ package {
 			}
 		}
 
+                /**************************************************************
+                *
+                * MultiPart Upload
+                *
+                ***************************************************************/
+
+
+                private function multiPartUpload(file_item: FileItem): void {
+                       removeFileReferenceEventListeners(file_item);
+                       removeURLStreamEventListeners(file_item);
+                       file_item.file_reference.addEventListener(Event.COMPLETE, fileLoadComplete_Handler);
+                       file_item.file_reference.load();
+               }
+
+               private function fileLoadComplete_Handler(event: Event): void {
+                    var file_item: FileItem = current_file_item;
+                    event.currentTarget.removeEventListener(Event.COMPLETE, arguments.callee);
+                    fileLoadComplete(event,file_item);
+               }
+
+               private function fileLoadComplete(event: Event,file_item: FileItem): void {
+
+                    if (this.useChunk) {
+
+                        file_item.chunks = Math.ceil(file_item.file_reference.size / this.chunkSize);
+                        if (file_item.chunks < 4 && file_item.file_reference.size > 1024*32) {
+                            this.chunkSize = Math.ceil(file_item.file_reference.size/4);
+                            file_item.chunks = 4;
+                        }   
+                        file_item.chunk = 0;
+                    } else {
+                        this.chunkSize = file_item.file_reference.size;
+                        file_item.chunks = 1;
+                        file_item.chunk = 0;
+                    }   
+                    this.uploadNextChunk(file_item);
+               }
+
+               private function chunkComplete(event: Event,file_item: FileItem): void {
+                            file_item.chunk++;
+                            file_item.chunkData.clear();
+                            removeURLStreamEventListeners(file_item);
+                            file_item.urlstream.close();
+                            this.uploadNextChunk(file_item);
+               }
+
+               private function uploadNextChunk(file_item: FileItem): Boolean {
+
+                       this.Debug("uploadNextChunk(): uploadNextChunk for File ID: " + this.current_file_item.id + " chunk " + file_item.chunk.toString() + " of " + file_item.chunks.toString());
+                       file_item.chunkData = new ByteArray();
+                        
+                       if (file_item.chunk >= file_item.chunks) {
+                           if (file_item.file_reference.data) {
+                                file_item.file_reference.data.clear();
+                           }
+                           file_item.chunks = 0;
+                           file_item.chunk = 0;
+                           this.Complete_Handler(null); 
+                           return false;
+                           
+                       }
+                        
+                       file_item.file_reference.data.readBytes(file_item.chunkData,0, file_item.file_reference.data.position + this.chunkSize > file_item.file_reference.data.length ? file_item.file_reference.data.length - file_item.file_reference.data.position: this.chunkSize); 
+                       file_item.urlstream = new URLStream();
+                       file_item.urlstream.addEventListener(Event.COMPLETE, chunkComplete_Handler);
+                       file_item.urlstream.addEventListener(ProgressEvent.PROGRESS, MultiPart_Progress);
+                       file_item.urlstream.addEventListener(SecurityErrorEvent.SECURITY_ERROR, MultiPart_Security);
+                       file_item.urlstream.addEventListener(Event.OPEN, MultiPart_Open);
+                       file_item.urlstream.addEventListener(HTTPStatusEvent.HTTP_STATUS, MultiPart_HTTPStatus);
+
+                       var req: URLRequest = new URLRequest(this.uploadURL);
+                       var cookie: String = ExternalInterface.call("function() { return document.cookie.toString() }");
+                       var header:URLRequestHeader = new URLRequestHeader("X-Cookie",cookie);
+                       req.method = URLRequestMethod.POST;
+                        
+                       var boundary: String = '----sapoboundary' + new Date().getTime(),
+                                    dashdash: String = '--',crlf:String = '\r\n',multipartBlob: ByteArray = new ByteArray();
+
+                       var key: String
+                       for (key in this.headers) {
+                            if (this.headers.hasOwnProperty(key)) {
+                                req.requestHeaders.push(new URLRequestHeader(key,headers[key]));
+                            }
+                       }
+                       req.requestHeaders.push(new URLRequestHeader("Content-Type",'multipart/form-data; boundary=' + boundary));
+                       
+                       for (key in this.uploadPostObject) {
+                            if (this.uploadPostObject.hasOwnProperty(key)) {
+                                multipartBlob.writeUTFBytes(dashdash + boundary + crlf + 
+                                                            'Content-Disposition: form-data; name="'+key+'"' + crlf+crlf +
+                                                            this.uploadPostObject[key] + crlf);
+                            }
+                       }
+
+                       multipartBlob.writeUTFBytes(dashdash + boundary + crlf + 
+                       'Content-Disposition: form-data; name="file"; filename="'+ file_item.file_reference.name+'"' + crlf + 
+                       'Content-Type: ' + 'application/octet-stream' + crlf + crlf);
+
+                       multipartBlob.writeBytes(file_item.chunkData);
+                       multipartBlob.writeUTFBytes(crlf + dashdash + boundary + dashdash + crlf);
+
+                       req.data = multipartBlob;
+
+                       setTimeout( function(): void { file_item.urlstream.load(req);},1);
+
+                    return true;
+                }
+
+                // Multipart handlers
+
+                private function removeURLStreamEventListeners(file_item: FileItem): void {
+                        if (file_item != null && file_item.urlstream != null) {
+                            file_item.urlstream.removeEventListener(ProgressEvent.PROGRESS, MultiPart_Progress);
+                            file_item.urlstream.removeEventListener(SecurityErrorEvent.SECURITY_ERROR,MultiPart_Security);
+                            file_item.urlstream.removeEventListener(Event.OPEN,MultiPart_Open);
+                            file_item.urlstream.removeEventListener(HTTPStatusEvent.HTTP_STATUS,MultiPart_HTTPStatus);
+                        }
+                }
+
+                private function chunkComplete_Handler(event: Event): void {
+                    var file_item: FileItem = this.current_file_item;
+
+                    this.Debug("chunkComplete(): chunkComplete for File ID: " + this.current_file_item.id + " chunk " + file_item.chunk.toString() + " of " + file_item.chunks.toString());
+
+                    event.currentTarget.removeEventListener(Event.COMPLETE, arguments.callee);
+                    this.Debug(file_item.toString());
+                    this.chunkComplete(event,file_item);
+                }
+
+                private function MultiPart_Progress(event: ProgressEvent): void {
+                    this.FileProgress_Handler(event);                                        
+                }
+
+                private function MultiPart_Security(event: SecurityErrorEvent): void {
+                    this.SecurityError_Handler(event);
+                }
+
+                private function MultiPart_Open(event: Event): void {
+                    this.Open_Handler(event);
+                }
+
+                private function MultiPart_HTTPStatus(event: HTTPStatusEvent): void {
+                    this.HTTPError_Handler(event);
+                }
+
+                // Utils
+
+		private function getSize(size:String):uint {
+			var value:Number = 0;
+			var unit:String = "kb";
+			
+			// Trim the string
+			var trimPattern:RegExp = /^\s*|\s*$/;
+			
+			size = size.toLowerCase();
+			size = size.replace(trimPattern, "");
+
+			
+			// Get the value part
+			var values:Array = size.match(/^\d+/);
+			if (values !== null && values.length > 0) {
+				value = parseInt(values[0]);
+			}
+			if (isNaN(value) || value < 0) value = 0;
+			
+			// Get the units part
+			var units:Array = size.match(/(b|kb|mb|gb)/);
+			if (units != null && units.length > 0) {
+				unit = units[0];
+			}
+			
+			// Set the multiplier for converting the unit to bytes
+			var multiplier:Number = 1024;
+			if (unit === "b")
+				multiplier = 1;
+			else if (unit === "mb")
+				multiplier = 1048576;
+			else if (unit === "gb")
+                                multiplier = 1073741824;
+			
+			return value * multiplier;
+		}
 	}
 }
