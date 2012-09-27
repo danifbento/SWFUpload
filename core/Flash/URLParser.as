@@ -1,7 +1,7 @@
 /******************************************************************************
 * @file: URLParser.as
 * @date: 11-09-2012
-* @lastmodified: Wed 12 Sep 2012 02:39:40 PM WEST
+* @lastmodified: Tue 25 Sep 2012 03:05:35 PM WEST
 *
 * @author: dfbento <danielbento@overdestiny.com>
 *
@@ -13,23 +13,21 @@ package {
     
     internal class URLParser {
 
-        private static var url: String;
-        
-        private static var protocol: String = "";
-        private static var host: String = "";
-        private static var port: String = "";
-        private static var path: String = "";
-        private static var parameters: Object;
         public function URLParser() {
         }
 
-        public static function parse(url: String): Object {
-            URLParser.url = url;
+        public static function parse(_url: String): Object {
+            var url:String = _url, 
+                protocol: String = "",  
+                host: String = "", 
+                port: String = "", 
+                path: String = "", 
+                parameters: Object = "";
 
             var reg:RegExp = /(?P<protocol>[a-zA-Z]+) : \/\/  (?P<host>[^:\/]*) (:(?P<port>\d+))?  ((?P<path>[^?]*))? ((?P<parameters>.*))? /x;
             var results: Array = reg.exec(url);
             var res: Object = new Object();
-
+            
             protocol = results.protocol;
             host = results.host;
             port = results.port;
@@ -51,7 +49,7 @@ package {
                     parameters[tuple[0]] = tuple[1];
                 }
             }
-
+            res["url"] = url;
             res["protocol"] = protocol;
             res["host"] = host;
             res["port"] = port;

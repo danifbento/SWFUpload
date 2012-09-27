@@ -1,7 +1,8 @@
 package {
 	import flash.net.FileReference;
-        import flash.net.URLStream;
-        import flash.utils.ByteArray;
+    import flash.net.URLStream;
+    import flash.net.Socket;
+    import flash.utils.ByteArray;
 
 	internal class FileItem
 	{
@@ -14,11 +15,14 @@ package {
 		public var file_status:int = 0;
 		private var js_object:Object;
 
-                // Important for MultiPart use
-                public var urlstream: URLStream;
-                public var chunk:uint;
-                public var chunks:uint;
-                public var chunkData: ByteArray;
+        // Important for MultiPart use
+        public var urlstream: URLStream;
+        public var chunk:uint;
+        public var chunks:uint;
+        public var chunkData: ByteArray;
+
+        // Important for SocketUse
+        public var socket: Socket;
 		
 		public static var FILE_STATUS_QUEUED:int		= -1;
 		public static var FILE_STATUS_IN_PROGRESS:int	= -2;
@@ -55,10 +59,10 @@ package {
 			
 			this.js_object.filestatus = this.file_status;
                         
-                        this.urlstream = new URLStream();
-                        this.chunk = 0;
-                        this.chunks = 0;
-                        this.chunkData = new ByteArray();
+            this.urlstream = new URLStream();
+            this.chunk = 0;
+            this.chunks = 0;
+            this.chunkData = new ByteArray();
 		}
 		
 		public function AddParam(name:String, value:String):void {

@@ -205,7 +205,8 @@ SWFUpload.prototype.initSettings = function (userSettings) {
 	
 	this.ensureDefault("use_multipart",false);
 	this.ensureDefault("use_chunk",false);
-	this.ensureDefault("chunk_size","200 MB");
+	this.ensureDefault("chunk_size","32 MB");
+	this.ensureDefault("use_socket",false);
 
 	// Other settings
 	this.customSettings = this.settings.custom_settings;
@@ -292,6 +293,7 @@ SWFUpload.prototype.getFlashVars = function () {
 			"&amp;debugEnabled=", encodeURIComponent(this.settings.debug_enabled),
 			"&amp;useMultiPart=", encodeURIComponent(this.settings.use_multipart),
 			"&amp;useChunk=", encodeURIComponent(this.settings.use_chunk),
+			"&amp;useSocket=", encodeURIComponent(this.settings.use_socket),
 			"&amp;chunkSize=", encodeURIComponent(this.settings.chunk_size),
 			"&amp;buttonImageURL=", encodeURIComponent(this.settings.button_image_url),
 			"&amp;buttonWidth=", encodeURIComponent(this.settings.button_width),
@@ -337,6 +339,9 @@ SWFUpload.prototype.buildParamString = function () {
 	return paramStringPairs.join("&amp;");
 };
 
+// Private: buildHeaderString takes the name/value pairs in the headers setting object
+// and joins them up in to a string formatted "name=value&amp;name=value", all headers override
+// internal ones, except for host, origin and referer
 SWFUpload.prototype.buildHeaderString = function () {
 	var headers = this.settings.headers;
 	var headersPair = [];
@@ -344,7 +349,15 @@ SWFUpload.prototype.buildHeaderString = function () {
 	if (typeof(headers) === "object") {
 		for (var name in headers) {
 			if (headers.hasOwnProperty(name)) {
-				headersPair.push(encodeURIComponent(name.toString()) + "=" + encodeURIComponent(headers[name].toString()));
+				if (!(typeof(headers[name]) === "object")) {
+					headersPair.push(encodeURIComponent(name.toString()) + "=" + encodeURIComponent(headers[name].toString()));
+				} else {
+					var subStringArr = [];
+					for (var param in headers[name]) {
+						subStringArr.push(encodeURIComponent(param.toString()) + "=" + encodeURIComponent(headers[name][param].toString()));  
+					}
+					headersPair.push(encodeURIComponent(name.toString()) + "=" + encodeURIComponent(subStringArr.join(";")));
+				}
 			}
 		}
 	}
@@ -419,6 +432,11 @@ SWFUpload.prototype.displayDebugInfo = function () {
 			"\t", "file_size_limit:          ", this.settings.file_size_limit, "\n",
 			"\t", "file_upload_limit:        ", this.settings.file_upload_limit, "\n",
 			"\t", "file_queue_limit:         ", this.settings.file_queue_limit, "\n",
+			"\t", "headers:                  ", this.settings.headers, "\n",
+			"\t", "use_multipart:            ", this.settings.use_multipart, "\n",
+			"\t", "use_chunk:                ", this.settings.use_chunk, "\n",
+			"\t", "chunk_size:               ", this.settings.chunk_size, "\n",
+			"\t", "use_socket:               ", this.settings.use_socket, "\n",
 			"\t", "debug:                    ", this.settings.debug.toString(), "\n",
 
 			"\t", "prevent_swf_caching:      ", this.settings.prevent_swf_caching.toString(), "\n",
