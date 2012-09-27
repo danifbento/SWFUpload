@@ -26,3 +26,44 @@ SWFUpload is a JavaScript Library that wraps the Flash Player's upload function.
 Unlike other Flash upload tools, SWFUpload leaves the UI in the developer's hands. Using a set of event handlers developers can display upload progress and status to the user in their own HTML/CSS UI.
 
 SWFUpload has been featured in such projects as YouTube and WordPress.
+
+USE
+===
+
+This version of SWFUpload has some new cool features you can use on your own like Multipart Upload and Socket Upload. With this two new modes you can pass custom headers to the request and upload using chunks.
+
+For Multipart:
+<code>
+	var settings = {
+		use_multipart : true
+	}
+</code>
+
+For Socket (this mode override the multipart method):
+<code>
+	var settings = {
+		use_socket : true
+	}
+</code>
+
+If you want to use chunks with multipart, you can set (the rules for size are the same as File Size Limit):
+<code>
+	var settings = {
+		use_chunk : true,
+		chunk_size : "200 kb"
+	}
+</code>
+
+NOTE: Attention, the size of the chunk also refers to the packet size on socket write before flushing the memory.
+
+Finally, for custom headers you can use the structure: 
+<code>
+	var settings = {
+		headers: { "HeaderName1": 'value', 
+				   "HeaderName2": 'value',
+				   "HeaderName3": {'param1': 'value', 'param2': 'value'}
+				 }
+	}
+</code>
+
+Headers like Host, Referer, Origin, Content-Type, Content-Length, Content-Disposition, User-Agent are ignored.
