@@ -33,37 +33,37 @@ USE
 This version of SWFUpload has some new cool features you can use on your own like Multipart Upload and Socket Upload. With this two new modes you can pass custom headers to the request and upload using chunks.
 
 For Multipart:
-<code>
+<pre>
 	var settings = {
 		use_multipart : true
 	}
-</code>
+</pre>
 
 For Socket (this mode override the multipart method):
-<code>
+<pre>
 	var settings = {
 		use_socket : true
 	}
-</code>
+</pre>
 
 If you want to use chunks with multipart, you can set (the rules for size are the same as File Size Limit):
-<code>
+<pre>
 	var settings = {
 		use_chunk : true,
 		chunk_size : "200 kb"
 	}
-</code>
+</pre>
 
 NOTE: Attention, the size of the chunk also refers to the packet size on socket write before flushing the memory.
 
 Finally, for custom headers you can use the structure: 
-<code>
+<pre>
 	var settings = {
 		headers: { "HeaderName1": 'value', 
 				   "HeaderName2": 'value',
 				   "HeaderName3": {'param1': 'value', 'param2': 'value'}
 				 }
 	}
-</code>
+</pre>
 
 Headers like Host, Referer, Origin, Content-Type, Content-Length, Content-Disposition, User-Agent are ignored.
