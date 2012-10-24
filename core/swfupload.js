@@ -38,7 +38,7 @@ SWFUpload.prototype.initSWFUpload = function (userSettings) {
 		// Load the settings.  Load the Flash movie.
 		this.initSettings(userSettings);
 		this.loadFlash();
-		this.displayDebugInfo();
+        this.displayDebugInfo();
 	} catch (ex) {
 		delete SWFUpload.instances[this.movieName];
 		throw ex;
@@ -94,7 +94,7 @@ SWFUpload.WINDOW_MODE = {
 
 // Private: takes a URL, determines if it is relative and converts to an absolute URL
 // using the current site. Only processes the URL if it can, otherwise returns the URL untouched
-SWFUpload.completeURL = function (url) {
+SWFUpload.completeURL = function(url) {
 	try {
 		var path = "";
 		if (typeof(url) !== "string" || url.match(/^https?:\/\//i) || url.match(/^\//) || url === "") {
@@ -304,7 +304,7 @@ SWFUpload.prototype.getFlashVars = function () {
 			"&amp;buttonTextStyle=", encodeURIComponent(this.settings.button_text_style),
 			"&amp;buttonAction=", encodeURIComponent(this.settings.button_action),
 			"&amp;buttonDisabled=", encodeURIComponent(this.settings.button_disabled),
-			"&amp;buttonCursor=", encodeURIComponent(this.settings.button_cursor),
+			"&amp;buttonCursor=", encodeURIComponent(this.settings.button_cursor)
 		].join("");
 };
 
@@ -858,19 +858,18 @@ SWFUpload.prototype.flashReady = function () {
 		return;
 	}
 
-	this.cleanUp();
+	this.cleanUp(movieElement);
 	
 	this.queueEvent("swfupload_loaded_handler");
 };
 
 // Private: removes Flash added fuctions to the DOM node to prevent memory leaks in IE.
 // This function is called by Flash each time the ExternalInterface functions are created.
-SWFUpload.prototype.cleanUp = function () {
-	var movieElement = this.getMovieElement();
-	
+SWFUpload.prototype.cleanUp = function (movieElement) {
+    movieElement = movieElement || this.movieElement;
 	// Pro-actively unhook all the Flash functions
 	try {
-		if (movieElement && typeof(movieElement.CallFunction) === "unknown") { // We only want to do this in IE
+		if (this.movieElement && typeof(movieElement.CallFunction) === "unknown") { // We only want to do this in IE
 			this.debug("Removing Flash functions hooks (this should only run in IE and should prevent memory leaks)");
 			for (var key in movieElement) {
 				try {
