@@ -304,7 +304,7 @@ SWFUpload.prototype.getFlashVars = function () {
 			"&amp;buttonTextStyle=", encodeURIComponent(this.settings.button_text_style),
 			"&amp;buttonAction=", encodeURIComponent(this.settings.button_action),
 			"&amp;buttonDisabled=", encodeURIComponent(this.settings.button_disabled),
-			"&amp;buttonCursor=", encodeURIComponent(this.settings.button_cursor),
+			"&amp;buttonCursor=", encodeURIComponent(this.settings.button_cursor)
 		].join("");
 };
 

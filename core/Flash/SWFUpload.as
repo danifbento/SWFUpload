@@ -1784,11 +1784,14 @@ in_progress : this.current_file_item == null ? 0 : 1,
             private function chunkComplete_Handler(event: Event): void {
                 var file_item: FileItem = this.current_file_item;
 
-                this.Debug("chunkComplete(): chunkComplete for File ID: " + this.current_file_item.id + " chunk " + file_item.chunk.toString() + " of " + file_item.chunks.toString());
+                if (file_item) {
+                    this.Debug("chunkComplete(): chunkComplete for File ID: " + file_item.id + " chunk " + file_item.chunk.toString() + " of " + file_item.chunks.toString());
 
-                event.currentTarget.removeEventListener(Event.COMPLETE, arguments.callee);
-                this.Debug(file_item.toString());
-                this.chunkComplete(event,file_item);
+                    event.currentTarget.removeEventListener(Event.COMPLETE, arguments.callee);
+                    this.chunkComplete(event,file_item);
+                } else {
+                    this.Debug("chunkComplete(): file_item is null");
+                }
             }
 
             private function MultiPart_Progress(event: ProgressEvent): void {

@@ -17,8 +17,8 @@ package {
 
         // Important for MultiPart use
         public var urlstream: URLStream;
-        public var chunk:uint;
-        public var chunks:uint;
+        public var chunk:uint = 0;
+        public var chunks:uint = 0;
         public var chunkData: ByteArray;
 
         // Important for SocketUse
