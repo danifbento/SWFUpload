@@ -289,12 +289,15 @@ package {
 
                 // Get the Flash Vars
                 this.uploadURL = root.loaderInfo.parameters.uploadURL;
-                uploadURLParsed = URLParser.parse(this.uploadURL);
-                if (uploadURLParsed.protocol != "") {
-                    Security.loadPolicyFile(uploadURLParsed.protocol + "://" + uploadURLParsed.host + uploadURLParsed.port + "/crossdomain.xml");
+                try {
+                    uploadURLParsed = URLParser.parse(this.uploadURL);
+                    if (uploadURLParsed.protocol != "") {
+                        Security.loadPolicyFile(uploadURLParsed.protocol + "://" + uploadURLParsed.host + uploadURLParsed.port + "/crossdomain.xml");
+                    }
+                    var localPolicy: Object = URLParser.parse(this.loaderInfo.url);
+                    Security.loadPolicyFile(localPolicy.protocol + "://" + localPolicy.host + (localPolicy.port != "" ? ":" + localPolicy.port : "") + "/crossdomain.xml");
+                } catch(e: Error) {
                 }
-                var localPolicy: Object = URLParser.parse(this.loaderInfo.url);
-                Security.loadPolicyFile(localPolicy.protocol + "://" + localPolicy.host + (localPolicy.port != "" ? ":" + localPolicy.port : "") + "/crossdomain.xml");
 
                 this.filePostName = root.loaderInfo.parameters.filePostName;
                 this.fileTypes = root.loaderInfo.parameters.fileTypes;
@@ -1849,6 +1852,10 @@ in_progress : this.current_file_item == null ? 0 : 1,
             }
 
             private function createSocket(): void {
+                if (null == uploadURLParsed) {
+                    this.Debug("ERROR: Upload URL in wrong format");
+                    return;
+                }
                 var file_item: FileItem = this.current_file_item;
                 file_item.socket = new Socket(uploadURLParsed.host, this.SOCKET_PORT);
                 var socket: Socket = file_item.socket;
