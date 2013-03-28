@@ -646,11 +646,14 @@ package {
                     }
                 }
 
-                if (isSuccessStatus && !this.useMultiPart) {
-                    this.Debug("Event: httpError: Translating status code " + event.status + " to uploadSuccess");
+                if (isSuccessStatus) {
+                    if (!this.useMultiPart)
+                    {
+                        this.Debug("Event: httpError: Translating status code " + event.status + " to uploadSuccess");
 
-                    var serverDataEvent:DataEvent = new DataEvent(DataEvent.UPLOAD_COMPLETE_DATA, event.bubbles, event.cancelable, "");
-                    this.ServerData_Handler(serverDataEvent);
+                        var serverDataEvent:DataEvent = new DataEvent(DataEvent.UPLOAD_COMPLETE_DATA, event.bubbles, event.cancelable, "");
+                        this.ServerData_Handler(serverDataEvent);
+                    }
                 } else {
                     this.upload_errors++;
                     this.current_file_item.file_status = FileItem.FILE_STATUS_ERROR;
