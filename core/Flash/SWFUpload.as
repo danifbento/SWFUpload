@@ -1703,9 +1703,14 @@ in_progress : this.current_file_item == null ? 0 : 1,
             }
 
             private function chunkComplete(event: Event,file_item: FileItem): void {
+                var bytesLoaded:Number = file_item.chunk * this.chunkSize + file_item.chunkData.length;
+                var bytesTotal:Number = file_item.file_reference.size;
+                ExternalCall.UploadProgress(this.uploadProgress_Callback, file_item.ToJavaScriptObject(), bytesLoaded, bytesTotal);
+
                 file_item.chunk++;
                 file_item.chunkData.clear();
                 removeURLLoaderEventListeners(file_item);
+                
                 if (file_item.chunk < file_item.chunks) {
                     file_item.urlloader.close();
                     this.uploadNextChunk(file_item);
@@ -1728,7 +1733,6 @@ in_progress : this.current_file_item == null ? 0 : 1,
                     file_item.file_reference.data.readBytes(file_item.chunkData,0, file_item.file_reference.data.position + this.chunkSize > file_item.file_reference.data.length ? file_item.file_reference.data.length - file_item.file_reference.data.position: this.chunkSize);  
                     file_item.urlloader = new URLLoader();
                     file_item.urlloader.addEventListener(Event.COMPLETE, chunkComplete_Handler);
-                    file_item.urlloader.addEventListener(ProgressEvent.PROGRESS, MultiPart_Progress);
                     file_item.urlloader.addEventListener(SecurityErrorEvent.SECURITY_ERROR, MultiPart_Security);
                     file_item.urlloader.addEventListener(Event.OPEN, MultiPart_Open);
                     file_item.urlloader.addEventListener(HTTPStatusEvent.HTTP_STATUS, MultiPart_HTTPStatus);
@@ -1788,7 +1792,6 @@ in_progress : this.current_file_item == null ? 0 : 1,
 
             private function removeURLLoaderEventListeners(file_item: FileItem): void {
                 if (file_item != null && file_item.urlloader != null) {
-                    file_item.urlloader.removeEventListener(ProgressEvent.PROGRESS, MultiPart_Progress);
                     file_item.urlloader.removeEventListener(SecurityErrorEvent.SECURITY_ERROR,MultiPart_Security);
                     file_item.urlloader.removeEventListener(Event.OPEN,MultiPart_Open);
                     file_item.urlloader.removeEventListener(HTTPStatusEvent.HTTP_STATUS,MultiPart_HTTPStatus);
@@ -1806,12 +1809,6 @@ in_progress : this.current_file_item == null ? 0 : 1,
                 } else {
                     this.Debug("chunkComplete(): file_item is null");
                 }
-            }
-
-            private function MultiPart_Progress(event: ProgressEvent): void {
-                event.bytesTotal = this.current_file_item.file_reference.size;
-                event.bytesLoaded += this.current_file_item.chunk * this.chunkSize;
-                this.FileProgress_Handler(event);
             }
 
             private function MultiPart_Security(event: SecurityErrorEvent): void {
