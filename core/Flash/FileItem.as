@@ -1,6 +1,6 @@
 package {
 	import flash.net.FileReference;
-    import flash.net.URLStream;
+    import flash.net.URLLoader;
     import flash.net.Socket;
     import flash.utils.ByteArray;
 
@@ -16,7 +16,7 @@ package {
 		private var js_object:Object;
 
         // Important for MultiPart use
-        public var urlstream: URLStream;
+        public var urlloader: URLLoader;
         public var chunk:uint = 0;
         public var chunks:uint = 0;
         public var chunkData: ByteArray;
@@ -59,7 +59,7 @@ package {
 			
 			this.js_object.filestatus = this.file_status;
                         
-            this.urlstream = new URLStream();
+            this.urlloader = new URLLoader();
             this.chunk = 0;
             this.chunks = 0;
             this.chunkData = new ByteArray();
