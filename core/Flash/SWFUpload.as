@@ -11,7 +11,6 @@ package {
     import flash.net.FileReference;
     import flash.net.FileFilter;
     import flash.net.URLLoader;
-    import flash.net.URLStream;
     import flash.net.URLRequest;
     import flash.net.URLRequestMethod;
     import flash.net.URLRequestHeader;
@@ -552,7 +551,10 @@ package {
 
             private function Open_Handler(event:Event):void {
                 this.Debug("Event: uploadProgress (OPEN): File ID: " + this.current_file_item.id);
-                ExternalCall.UploadProgress(this.uploadProgress_Callback, this.current_file_item.ToJavaScriptObject(), 0, this.current_file_item.file_reference.size);
+                if (!this.useMultiPart ||  this.current_file_item.chunk === 0)
+                {
+                    ExternalCall.UploadProgress(this.uploadProgress_Callback, this.current_file_item.ToJavaScriptObject(), 0, this.current_file_item.file_reference.size);
+                }
             }
 
             private function FileProgress_Handler(event:ProgressEvent):void {
@@ -644,12 +646,14 @@ package {
                     }
                 }
 
-
                 if (isSuccessStatus) {
-                    this.Debug("Event: httpError: Translating status code " + event.status + " to uploadSuccess");
+                    if (!this.useMultiPart)
+                    {
+                        this.Debug("Event: httpError: Translating status code " + event.status + " to uploadSuccess");
 
-                    var serverDataEvent:DataEvent = new DataEvent(DataEvent.UPLOAD_COMPLETE_DATA, event.bubbles, event.cancelable, "");
-                    this.ServerData_Handler(serverDataEvent);
+                        var serverDataEvent:DataEvent = new DataEvent(DataEvent.UPLOAD_COMPLETE_DATA, event.bubbles, event.cancelable, "");
+                        this.ServerData_Handler(serverDataEvent);
+                    }
                 } else {
                     this.upload_errors++;
                     this.current_file_item.file_status = FileItem.FILE_STATUS_ERROR;
@@ -834,7 +838,7 @@ package {
                         // Remove the event handlers
                         this.removeFileReferenceEventListeners(this.current_file_item);
                     } else {
-                        this.removeURLStreamEventListeners(this.current_file_item);
+                        this.removeURLLoaderEventListeners(this.current_file_item);
                     }
 
                     this.current_file_item.file_status = FileItem.FILE_STATUS_QUEUED;
@@ -875,7 +879,7 @@ package {
                     }
                     this.UploadComplete(false);
 
-                    this.current_file_item.urlstream.close();
+                    this.current_file_item.urlloader.close();
                     if (this.current_file_item.socket) {
                         this.current_file_item.socket.close();
                         removeSocketListeners(this.current_file_item);
@@ -894,9 +898,9 @@ package {
 
                         // Cancel the file (just for good measure) and make the callback
 
-                        this.removeURLStreamEventListeners(file_item);
-                        file_item.urlstream.close();
-                        file_item.urlstream = null;
+                        this.removeURLLoaderEventListeners(file_item);
+                        file_item.urlloader.close();
+                        file_item.urlloader = null;
                         file_item.file_reference.cancel();
                         this.removeFileReferenceEventListeners(file_item);
 
@@ -940,8 +944,8 @@ package {
                         if (!this.useMultiPart) {
                             this.removeFileReferenceEventListeners(file_item);
                         } else {
-                            file_item.urlstream.close();
-                            this.removeURLStreamEventListeners(file_item);
+                            file_item.urlloader.close();
+                            this.removeURLLoaderEventListeners(file_item);
                         }
                         //file_item.file_reference = null;
 
@@ -1402,7 +1406,7 @@ in_progress : this.current_file_item == null ? 0 : 1,
                         // Remove the event handlers
                         this.removeFileReferenceEventListeners(this.current_file_item);
                     } else {
-                        this.removeURLStreamEventListeners(this.current_file_item);
+                        this.removeURLLoaderEventListeners(this.current_file_item);
                     }
 
                     // Re-queue the FileItem
@@ -1424,7 +1428,7 @@ in_progress : this.current_file_item == null ? 0 : 1,
                 var jsFileObj:Object = this.current_file_item.ToJavaScriptObject();
 
                 this.removeFileReferenceEventListeners(this.current_file_item);
-                this.removeURLStreamEventListeners(this.current_file_item);
+                this.removeURLLoaderEventListeners(this.current_file_item);
 
                 if (!eligible_for_requeue || this.requeueOnError == false) {
                     //this.current_file_item.file_reference = null;
@@ -1669,7 +1673,7 @@ in_progress : this.current_file_item == null ? 0 : 1,
 
             private function multiPartUpload(file_item: FileItem): void {
                 removeFileReferenceEventListeners(file_item);
-                removeURLStreamEventListeners(file_item);
+                removeURLLoaderEventListeners(file_item);
                 file_item.file_reference.addEventListener(Event.COMPLETE, fileLoadComplete_Handler);
                 file_item.file_reference.load();
             }
@@ -1699,37 +1703,39 @@ in_progress : this.current_file_item == null ? 0 : 1,
             }
 
             private function chunkComplete(event: Event,file_item: FileItem): void {
+                var bytesLoaded:Number = file_item.chunk * this.chunkSize + file_item.chunkData.length;
+                var bytesTotal:Number = file_item.file_reference.size;
+                ExternalCall.UploadProgress(this.uploadProgress_Callback, file_item.ToJavaScriptObject(), bytesLoaded, bytesTotal);
+
                 file_item.chunk++;
                 file_item.chunkData.clear();
-                removeURLStreamEventListeners(file_item);
-                file_item.urlstream.close();
-                this.uploadNextChunk(file_item);
+                removeURLLoaderEventListeners(file_item);
+                
+                if (file_item.chunk < file_item.chunks) {
+                    file_item.urlloader.close();
+                    this.uploadNextChunk(file_item);
+                }
+                else {
+                    if (file_item.file_reference.data) {
+                        file_item.file_reference.data.clear();
+                    }
+                    file_item.chunks = 0;
+                    file_item.chunk = 0;
+                    this.UploadSuccess(file_item, file_item.urlloader.data);
+                }
             }
 
             private function uploadNextChunk(file_item: FileItem): Boolean {
-
                 if (!useSocket) {
                     this.Debug("uploadNextChunk(): uploadNextChunk for File ID: " + this.current_file_item.id + " chunk " + file_item.chunk.toString() + " of " + file_item.chunks.toString());
                     file_item.chunkData = new ByteArray();
 
-                    if (file_item.chunk >= file_item.chunks) {
-                        if (file_item.file_reference.data) {
-                            file_item.file_reference.data.clear();
-                        }
-                        file_item.chunks = 0;
-                        file_item.chunk = 0;
-                        this.Complete_Handler(null); 
-                        return false;
-    
-                    }
-
                     file_item.file_reference.data.readBytes(file_item.chunkData,0, file_item.file_reference.data.position + this.chunkSize > file_item.file_reference.data.length ? file_item.file_reference.data.length - file_item.file_reference.data.position: this.chunkSize);  
-                    file_item.urlstream = new URLStream();
-                    file_item.urlstream.addEventListener(Event.COMPLETE, chunkComplete_Handler);
-                    file_item.urlstream.addEventListener(ProgressEvent.PROGRESS, MultiPart_Progress);
-                    file_item.urlstream.addEventListener(SecurityErrorEvent.SECURITY_ERROR, MultiPart_Security);
-                    file_item.urlstream.addEventListener(Event.OPEN, MultiPart_Open);
-                    file_item.urlstream.addEventListener(HTTPStatusEvent.HTTP_STATUS, MultiPart_HTTPStatus);
+                    file_item.urlloader = new URLLoader();
+                    file_item.urlloader.addEventListener(Event.COMPLETE, chunkComplete_Handler);
+                    file_item.urlloader.addEventListener(SecurityErrorEvent.SECURITY_ERROR, MultiPart_Security);
+                    file_item.urlloader.addEventListener(Event.OPEN, MultiPart_Open);
+                    file_item.urlloader.addEventListener(HTTPStatusEvent.HTTP_STATUS, MultiPart_HTTPStatus);
 
                     var req: URLRequest = new URLRequest(this.uploadURL);
                     //var cookie: String = ExternalInterface.call("function() { return document.cookie.toString() }");
@@ -1756,6 +1762,15 @@ in_progress : this.current_file_item == null ? 0 : 1,
                         }
                     }
 
+                    var filePostObject: Object = file_item.GetPostObject();
+                    for (key in filePostObject) {
+                        if (filePostObject.hasOwnProperty(key)) {
+                            multipartBlob.writeUTFBytes(dashdash + boundary + crlf + 
+                                    'Content-Disposition: form-data; name="'+key+'"' + crlf+crlf +
+                                    filePostObject[key] + crlf);
+                        }
+                    }
+
                     multipartBlob.writeUTFBytes(dashdash + boundary + crlf + 
                             'Content-Disposition: form-data; name="file"; filename="'+ file_item.file_reference.name+'"' + crlf + 
                             'Content-Type: ' + 'application/octet-stream' + crlf + crlf);
@@ -1765,7 +1780,7 @@ in_progress : this.current_file_item == null ? 0 : 1,
 
                     req.data = multipartBlob;
 
-                    setTimeout( function(): void { file_item.urlstream.load(req);},1);
+                    setTimeout( function(): void { file_item.urlloader.load(req);},1);
                 }
 
                 if (useSocket) {
@@ -1775,12 +1790,11 @@ in_progress : this.current_file_item == null ? 0 : 1,
                 return true;
             }
 
-            private function removeURLStreamEventListeners(file_item: FileItem): void {
-                if (file_item != null && file_item.urlstream != null) {
-                    file_item.urlstream.removeEventListener(ProgressEvent.PROGRESS, MultiPart_Progress);
-                    file_item.urlstream.removeEventListener(SecurityErrorEvent.SECURITY_ERROR,MultiPart_Security);
-                    file_item.urlstream.removeEventListener(Event.OPEN,MultiPart_Open);
-                    file_item.urlstream.removeEventListener(HTTPStatusEvent.HTTP_STATUS,MultiPart_HTTPStatus);
+            private function removeURLLoaderEventListeners(file_item: FileItem): void {
+                if (file_item != null && file_item.urlloader != null) {
+                    file_item.urlloader.removeEventListener(SecurityErrorEvent.SECURITY_ERROR,MultiPart_Security);
+                    file_item.urlloader.removeEventListener(Event.OPEN,MultiPart_Open);
+                    file_item.urlloader.removeEventListener(HTTPStatusEvent.HTTP_STATUS,MultiPart_HTTPStatus);
                 }
             }
 
@@ -1795,10 +1809,6 @@ in_progress : this.current_file_item == null ? 0 : 1,
                 } else {
                     this.Debug("chunkComplete(): file_item is null");
                 }
-            }
-
-            private function MultiPart_Progress(event: ProgressEvent): void {
-                this.FileProgress_Handler(event);                                        
             }
 
             private function MultiPart_Security(event: SecurityErrorEvent): void {
