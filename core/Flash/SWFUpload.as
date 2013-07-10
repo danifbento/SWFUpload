@@ -30,6 +30,9 @@ package {
     import flash.text.TextFormat;
     import flash.ui.Mouse;
     import flash.utils.Timer;
+    import flash.xml.XMLDocument;
+    import flash.xml.XMLNode;
+    import flash.xml.XMLNodeType;
     import flash.utils.ByteArray;
     import flash.utils.setTimeout;
     import flash.system.Security;
@@ -180,8 +183,6 @@ package {
                     return;
                 }
 
-                Security.allowDomain("*");	// Allow uploading to any domain
-
                 // Keep Flash Player busy so it doesn't show the "flash script is running slowly" error
                 var counter:Number = 0;
                 root.addEventListener(Event.ENTER_FRAME, function ():void { if (++counter > 100) counter = 0; });
@@ -259,7 +260,8 @@ package {
                 this.stage.addChild(this.buttonCursorSprite);
 
                 // Get the movie name
-                this.movieName = root.loaderInfo.parameters.movieName;
+                this.movieName = root.loaderInfo.parameters.movieName || '';
+                this.movieName = this.movieName.replace(/[^a-zA-Z0-9\_\.\-]/g, "");
 
                 // **Configure the callbacks**
                 // The JavaScript tracks all the instances of SWFUpload on a page.  We can access the instance
@@ -415,6 +417,8 @@ package {
 
                 try {
                     this.SetButtonText(String(root.loaderInfo.parameters.buttonText));
+                    // HTML-escape strings that come from the user, preventing XSS.
+                    this.SetButtonText(htmlEscape(String(root.loaderInfo.parameters.buttonText)));
                 } catch (ex:Object) {
                     this.SetButtonText("");
                 }
@@ -1266,7 +1270,7 @@ in_progress : this.current_file_item == null ? 0 : 1,
                 var style:StyleSheet = new StyleSheet();
                 style.parseCSS(this.buttonTextStyle);
                 this.buttonTextField.styleSheet = style;
-                this.buttonTextField.htmlText = this.buttonText;
+                this.buttonTextField.htmlText = '<span class="button-text">' + this.buttonText + '</span>';
             }
 
             private function SetButtonTextPadding(left:Number, top:Number):void {
@@ -2067,6 +2071,10 @@ in_progress : this.current_file_item == null ? 0 : 1,
                 this.Debug("HTTP Response:\n\r" + response);
 
                 return robject;
+            }
+
+            public function htmlEscape(str:String):String {
+                return XMLDocument( new XMLNode( XMLNodeType.TEXT_NODE, str ) ).toString();
             }
         }
 }
